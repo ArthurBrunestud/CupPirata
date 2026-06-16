@@ -78,33 +78,40 @@ class TestGameLoopDisparoJugador:
         # el segundo intento de disparo es muy pronto, no debe sumar otro
         assert len(loop.player_projectiles) == 1
 
-
 class TestGameLoopAtaquesJefe:
     def test_tick_actualiza_al_jefe_y_puede_generar_proyectiles(self):
         loop = make_game_loop()
-        # fase 1 dispara cada 2.0s
-        loop.tick(dt=2.0, move_direction=Vector2(0, 0), is_shooting=False)
+        for _ in range(4):
+            loop.tick(dt=0.5, move_direction=Vector2(0, 0), is_shooting=False)
         assert len(loop.enemy_projectiles) == 3
 
     def test_proyectiles_del_jefe_avanzan_cada_tick(self):
         loop = make_game_loop()
-        loop.tick(dt=2.0, move_direction=Vector2(0, 0), is_shooting=False)
+        for _ in range(4):
+            loop.tick(dt=0.5, move_direction=Vector2(0, 0), is_shooting=False)
         y_inicial = loop.enemy_projectiles[0].position.y
-        loop.tick(dt=1.0, move_direction=Vector2(0, 0), is_shooting=False)
+        loop.tick(dt=0.1, move_direction=Vector2(0, 0), is_shooting=False)
         assert loop.enemy_projectiles[0].position.y != y_inicial
 
     def test_proyectiles_del_jefe_fuera_de_pantalla_se_eliminan(self):
         loop = make_game_loop()
-        loop.tick(dt=2.0, move_direction=Vector2(0, 0), is_shooting=False)
+        for _ in range(4):
+            loop.tick(dt=0.5, move_direction=Vector2(0, 0), is_shooting=False)
         assert len(loop.enemy_projectiles) == 3
-        loop.tick(dt=20.0, move_direction=Vector2(0, 0), is_shooting=False)
-        assert len(loop.enemy_projectiles) == 0
+
+        ids_originales = [id(p) for p in loop.enemy_projectiles]
+        for p in loop.enemy_projectiles:
+            p.position = Vector2(p.position.x, 590)
+            p.hitbox.move_to(p.position)
+
+        loop.tick(dt=0.1, move_direction=Vector2(0, 0), is_shooting=False)
+        ids_restantes = [id(p) for p in loop.enemy_projectiles]
+        assert not any(pid in ids_restantes for pid in ids_originales)
 
 
 class TestGameLoopColisiones:
     def test_proyectil_del_jugador_que_impacta_quita_hp_al_jefe(self):
         loop = make_game_loop(boss_hp=300)
-        # coloca un proyectil del jugador justo sobre el jefe
         loop.tick(dt=0.016, move_direction=Vector2(0, 0), is_shooting=True)
         proyectil = loop.player_projectiles[0]
         proyectil.position = Vector2(loop.boss.position.x + 10, loop.boss.position.y + 10)
@@ -126,7 +133,8 @@ class TestGameLoopColisiones:
 
     def test_proyectil_del_jefe_que_impacta_quita_vida_al_jugador(self):
         loop = make_game_loop(player_hp=3)
-        loop.tick(dt=2.0, move_direction=Vector2(0, 0), is_shooting=False)
+        for _ in range(4):
+            loop.tick(dt=0.5, move_direction=Vector2(0, 0), is_shooting=False)
         proyectil_enemigo = loop.enemy_projectiles[0]
         proyectil_enemigo.position = Vector2(loop.player.position.x, loop.player.position.y)
         proyectil_enemigo.hitbox.move_to(proyectil_enemigo.position)
@@ -148,7 +156,8 @@ class TestGameLoopFinDePartida:
 
     def test_jugador_derrotado_resulta_en_derrota(self):
         loop = make_game_loop(player_hp=1)
-        loop.tick(dt=2.0, move_direction=Vector2(0, 0), is_shooting=False)
+        for _ in range(4):
+            loop.tick(dt=0.5, move_direction=Vector2(0, 0), is_shooting=False)
         proyectil_enemigo = loop.enemy_projectiles[0]
         proyectil_enemigo.position = Vector2(loop.player.position.x, loop.player.position.y)
         proyectil_enemigo.hitbox.move_to(proyectil_enemigo.position)
@@ -157,9 +166,9 @@ class TestGameLoopFinDePartida:
         assert loop.game_state.status.value == "lost"
 
     def test_partida_terminada_no_sigue_moviendo_al_jugador(self):
-        """Si la partida ya termino, tick() no debe seguir actualizando nada."""
         loop = make_game_loop(player_hp=1)
-        loop.tick(dt=2.0, move_direction=Vector2(0, 0), is_shooting=False)
+        for _ in range(4):
+            loop.tick(dt=0.5, move_direction=Vector2(0, 0), is_shooting=False)
         proyectil_enemigo = loop.enemy_projectiles[0]
         proyectil_enemigo.position = Vector2(loop.player.position.x, loop.player.position.y)
         proyectil_enemigo.hitbox.move_to(proyectil_enemigo.position)
