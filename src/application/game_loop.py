@@ -1,15 +1,40 @@
 """
 GameLoop: orquesta un frame completo de logica del juego.
-Capa de aplicacion: usa el dominio (Player, Boss, GameState, etc.)
+Capa de aplicacion: usa el dominio (Player, Boss, MiniBoss, GameState, etc.)
 pero NO depende de Pygame.
 
-Ciclo 9a (este archivo): movimiento del jugador y su disparo.
-Ciclo 9b (siguiente): ataques del jefe, colisiones, puntaje y fin de partida.
+Responsabilidades por frame (tick):
+    1. Si la partida ya termino (WON/LOST), no hace nada mas.
+    2. Mueve al jugador segun la direccion recibida.
+    3. Procesa el disparo del jugador (respeta su cooldown).
+    4. Actualiza al jefe: genera sus ataques (proyectiles y rayos) y se mueve.
+    5. Si el HP del jefe baja a 50 o menos, hace aparecer 2 MiniBoss
+       (uno a cada lado de la pantalla), una sola vez.
+    6. Actualiza los MiniBoss existentes: se mueven y generan sus proyectiles.
+    7. Actualiza posiciones de todos los proyectiles (jugador y enemigo) y rayos.
+    8. Resuelve colisiones jugador<->proyectiles enemigos y jefe<->proyectiles
+       del jugador. Cada punto de dano al jefe suma 1 punto de puntaje.
+       (Los MiniBoss son invulnerables, no participan de esta resolucion.)
+    9. Resuelve dano por contacto fisico directo entre jugador y jefe.
+    10. Elimina proyectiles fuera de pantalla y rayos que terminaron su vida.
+    11. Evalua condiciones de fin de partida.
 """
 from src.domain.vector import Vector2
 from src.domain.entities.player import Player
 from src.domain.entities.boss import Boss
+from src.domain.entities.mini_boss import MiniBoss
 from src.domain.game_state import GameState
+from src.domain.rules.collision import (
+    resolve_player_hit,
+    resolve_boss_hit,
+    resolve_contact_damage,
+)
+
+MINI_BOSS_HP_TRIGGER = 50
+MINI_BOSS_WIDTH = 80
+MINI_BOSS_HEIGHT = 80
+MINI_BOSS_SHOOT_COOLDOWN = 2.0
+MINI_BOSS_MARGIN = 20
 
 
 class GameLoop:
@@ -21,19 +46,23 @@ class GameLoop:
         self.player_projectiles = []
         self.enemy_projectiles = []
         self.beams = []
+        self.mini_bosses = []
+        self._contact_timer = 0.0
 
     def tick(self, dt: float, move_direction: Vector2, is_shooting: bool) -> None:
-        """
-        Avanza un frame de logica:
-            1. Mueve al jugador segun la direccion recibida.
-            2. Actualiza el cooldown de disparo del jugador.
-            3. Si is_shooting y puede disparar, genera un nuevo proyectil.
-            4. Actualiza la posicion de todos los proyectiles del jugador.
-            5. Elimina los proyectiles del jugador que salieron de pantalla.
-        """
+        if self.game_state.is_game_over():
+            return
+
         self._mover_jugador(dt, move_direction)
         self._procesar_disparo_jugador(dt, is_shooting)
-        self._actualizar_proyectiles_jugador(dt)
+        self._actualizar_jefe(dt)
+        self._verificar_aparicion_mini_bosses()
+        self._actualizar_mini_bosses(dt)
+        self._actualizar_proyectiles(dt)
+        self._actualizar_rayos(dt)
+        self._resolver_colisiones()
+        self._resolver_contacto_con_jefe(dt)
+        self.game_state.check_end_conditions(self.player, self.boss)
 
     # -------------------- Pasos internos --------------------
 
@@ -49,9 +78,71 @@ class GameLoop:
             if proyectil is not None:
                 self.player_projectiles.append(proyectil)
 
-    def _actualizar_proyectiles_jugador(self, dt: float) -> None:
+    def _actualizar_jefe(self, dt: float) -> None:
+        resultado = self.boss.update(dt)
+        self.enemy_projectiles.extend(resultado["projectiles"])
+        self.beams.extend(resultado["beams"])
+
+    def _verificar_aparicion_mini_bosses(self) -> None:
+        """Crea los dos MiniBoss una sola vez, cuando el HP del jefe
+        cae a MINI_BOSS_HP_TRIGGER o menos."""
+        if self.mini_bosses:
+            return
+        if self.boss.hp > MINI_BOSS_HP_TRIGGER:
+            return
+
+        screen_width = self.boss.screen_width
+        screen_height = self.boss.screen_height
+        y_inicial = screen_height / 2 - MINI_BOSS_HEIGHT / 2
+
+        mini_izquierdo = MiniBoss(
+            position=Vector2(MINI_BOSS_MARGIN, y_inicial),
+            width=MINI_BOSS_WIDTH, height=MINI_BOSS_HEIGHT,
+            screen_width=screen_width, screen_height=screen_height,
+            shoot_cooldown=MINI_BOSS_SHOOT_COOLDOWN,
+        )
+        mini_derecho = MiniBoss(
+            position=Vector2(screen_width - MINI_BOSS_WIDTH - MINI_BOSS_MARGIN, y_inicial),
+            width=MINI_BOSS_WIDTH, height=MINI_BOSS_HEIGHT,
+            screen_width=screen_width, screen_height=screen_height,
+            shoot_cooldown=MINI_BOSS_SHOOT_COOLDOWN,
+        )
+
+        self.mini_bosses = [mini_izquierdo, mini_derecho]
+
+    def _actualizar_mini_bosses(self, dt: float) -> None:
+        for mini in self.mini_bosses:
+            proyectiles = mini.update(dt)
+            self.enemy_projectiles.extend(proyectiles)
+
+    def _actualizar_proyectiles(self, dt: float) -> None:
         for proyectil in self.player_projectiles:
             proyectil.update(dt)
+        for proyectil in self.enemy_projectiles:
+            proyectil.update(dt)
+
         self.player_projectiles = [
             p for p in self.player_projectiles if not p.is_off_screen()
         ]
+        self.enemy_projectiles = [
+            p for p in self.enemy_projectiles if not p.is_off_screen()
+        ]
+
+    def _actualizar_rayos(self, dt: float) -> None:
+        for beam in self.beams:
+            beam.update(dt)
+        self.beams = [b for b in self.beams if b.is_visible()]
+
+    def _resolver_colisiones(self) -> None:
+        hp_jefe_antes = self.boss.hp
+        self.player_projectiles = resolve_boss_hit(self.boss, self.player_projectiles)
+        dano_infligido = hp_jefe_antes - self.boss.hp
+        if dano_infligido > 0:
+            self.game_state.add_score(dano_infligido)
+
+        self.enemy_projectiles = resolve_player_hit(self.player, self.enemy_projectiles)
+
+    def _resolver_contacto_con_jefe(self, dt: float) -> None:
+        self._contact_timer = resolve_contact_damage(
+            self.player, self.boss, dt, self._contact_timer
+        )
