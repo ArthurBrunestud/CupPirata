@@ -14,10 +14,11 @@ Responsabilidades por frame (tick):
     7. Actualiza posiciones de todos los proyectiles (jugador y enemigo) y rayos.
     8. Resuelve colisiones jugador<->proyectiles enemigos y jefe<->proyectiles
        del jugador. Cada punto de dano al jefe suma 1 punto de puntaje.
-       (Los MiniBoss son invulnerables, no participan de esta resolucion.)
     9. Resuelve dano por contacto fisico directo entre jugador y jefe.
-    10. Elimina proyectiles fuera de pantalla y rayos que terminaron su vida.
-    11. Evalua condiciones de fin de partida.
+    10. Detecta si el jugador perdio HP en este frame (comparando con el HP
+        del frame anterior) y, si fue asi, activa un parpadeo visual de 1s.
+    11. Elimina proyectiles fuera de pantalla y rayos que terminaron su vida.
+    12. Evalua condiciones de fin de partida.
 """
 from src.domain.vector import Vector2
 from src.domain.entities.player import Player
@@ -36,6 +37,9 @@ MINI_BOSS_HEIGHT = 80
 MINI_BOSS_SHOOT_COOLDOWN = 2.0
 MINI_BOSS_MARGIN = 20
 
+PLAYER_FLASH_DURATION = 1.0
+PLAYER_FLASH_INTERVAL = 0.1
+
 
 class GameLoop:
     def __init__(self, player: Player, boss: Boss, game_state: GameState):
@@ -48,6 +52,10 @@ class GameLoop:
         self.beams = []
         self.mini_bosses = []
         self._contact_timer = 0.0
+
+        self._player_flash_timer = 0.0
+        self._player_visible = True
+        self._hp_anterior = player.hp
 
     def tick(self, dt: float, move_direction: Vector2, is_shooting: bool) -> None:
         if self.game_state.is_game_over():
@@ -62,6 +70,7 @@ class GameLoop:
         self._actualizar_rayos(dt)
         self._resolver_colisiones()
         self._resolver_contacto_con_jefe(dt)
+        self._actualizar_parpadeo_jugador(dt)
         self.game_state.check_end_conditions(self.player, self.boss)
 
     # -------------------- Pasos internos --------------------
@@ -84,8 +93,6 @@ class GameLoop:
         self.beams.extend(resultado["beams"])
 
     def _verificar_aparicion_mini_bosses(self) -> None:
-        """Crea los dos MiniBoss una sola vez, cuando el HP del jefe
-        cae a MINI_BOSS_HP_TRIGGER o menos."""
         if self.mini_bosses:
             return
         if self.boss.hp > MINI_BOSS_HP_TRIGGER:
@@ -146,3 +153,41 @@ class GameLoop:
         self._contact_timer = resolve_contact_damage(
             self.player, self.boss, dt, self._contact_timer
         )
+
+    # -------------------- Parpadeo visual del jugador --------------------
+
+    def _actualizar_parpadeo_jugador(self, dt: float) -> None:
+        """
+        Detecta si el jugador perdio HP en este frame (comparando con el
+        HP registrado al final del frame anterior) y, si fue asi, activa
+        un parpadeo visual de PLAYER_FLASH_DURATION segundos.
+
+        Mientras el parpadeo este activo, alterna self._player_visible
+        cada PLAYER_FLASH_INTERVAL segundos. El Renderer consulta
+        is_player_visible() para decidir si dibuja al jugador o no.
+        """
+        if self.player.hp < self._hp_anterior:
+            self._player_flash_timer = PLAYER_FLASH_DURATION
+        self._hp_anterior = self.player.hp
+
+        if self._player_flash_timer <= 0.0:
+            self._player_flash_timer = 0.0
+            self._player_visible = True
+            return
+
+        tiempo_transcurrido_total = PLAYER_FLASH_DURATION - self._player_flash_timer
+        ciclo_actual = int(tiempo_transcurrido_total / PLAYER_FLASH_INTERVAL)
+
+        self._player_flash_timer = max(0.0, self._player_flash_timer - dt)
+
+        nuevo_tiempo_transcurrido = PLAYER_FLASH_DURATION - self._player_flash_timer
+        nuevo_ciclo = int(nuevo_tiempo_transcurrido / PLAYER_FLASH_INTERVAL)
+
+        if nuevo_ciclo != ciclo_actual:
+            self._player_visible = not self._player_visible
+
+        if self._player_flash_timer == 0.0:
+            self._player_visible = True
+
+    def is_player_visible(self) -> bool:
+        return self._player_visible
