@@ -196,3 +196,46 @@ class TestGameLoopContactoConJefe:
 
         loop.tick(dt=0.5, move_direction=Vector2(0, 0), is_shooting=False)
         assert loop.player.hp == 6
+
+class TestGameLoopMiniBosses:
+    def test_no_aparecen_mini_bosses_con_hp_alto(self):
+        loop = make_game_loop(boss_hp=300)
+        loop.tick(dt=0.1, move_direction=Vector2(0, 0), is_shooting=False)
+        assert loop.mini_bosses == []
+
+    def test_aparecen_dos_mini_bosses_al_cruzar_50_hp(self):
+        loop = make_game_loop(boss_hp=51)
+        loop.boss.take_damage(2)  # queda en 49, <= 50
+        loop.tick(dt=0.1, move_direction=Vector2(0, 0), is_shooting=False)
+        assert len(loop.mini_bosses) == 2
+
+    def test_mini_bosses_aparecen_en_lados_opuestos(self):
+        loop = make_game_loop(boss_hp=51)
+        loop.boss.take_damage(2)
+        loop.tick(dt=0.1, move_direction=Vector2(0, 0), is_shooting=False)
+        posiciones_x = sorted(m.position.x for m in loop.mini_bosses)
+        assert posiciones_x[0] < SCREEN_WIDTH / 2
+        assert posiciones_x[1] > SCREEN_WIDTH / 2
+
+    def test_mini_bosses_no_vuelven_a_crearse_en_ticks_siguientes(self):
+        loop = make_game_loop(boss_hp=51)
+        loop.boss.take_damage(2)
+        loop.tick(dt=0.1, move_direction=Vector2(0, 0), is_shooting=False)
+        loop.tick(dt=0.1, move_direction=Vector2(0, 0), is_shooting=False)
+        assert len(loop.mini_bosses) == 2
+
+    def test_mini_bosses_generan_proyectiles_propios(self):
+        loop = make_game_loop(boss_hp=51)
+        loop.boss.take_damage(2)
+        loop.tick(dt=2.0, move_direction=Vector2(0, 0), is_shooting=False)
+        # cada mini boss dispara 3 balas -> 6 en total, mas las del boss principal
+        assert len(loop.enemy_projectiles) >= 6
+
+    def test_mini_bosses_son_invulnerables_a_proyectiles_del_jugador(self):
+        loop = make_game_loop(boss_hp=51)
+        loop.boss.take_damage(2)
+        loop.tick(dt=0.1, move_direction=Vector2(0, 0), is_shooting=False)
+
+        mini = loop.mini_bosses[0]
+        mini.take_damage(9999)
+        assert mini.is_alive() is True
