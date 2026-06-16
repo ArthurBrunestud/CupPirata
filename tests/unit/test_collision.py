@@ -8,6 +8,9 @@ from src.domain.entities.player import Player
 from src.domain.entities.boss import Boss
 from src.domain.entities.projectile import Projectile, Owner
 from src.domain.rules.collision import resolve_player_hit, resolve_boss_hit
+from src.domain.entities.boss import Boss
+from src.domain.rules.collision import resolve_contact_damage
+
 
 
 SCREEN_WIDTH = 800
@@ -111,3 +114,69 @@ class TestResolveBossHit:
         sobrevivientes = resolve_boss_hit(b, [proyectil_lejano])
         assert b.hp == 300
         assert sobrevivientes == [proyectil_lejano]
+
+def make_boss_contacto(x=300, y=50, hp=300, max_hp=300):
+    return Boss(
+        position=Vector2(x, y), width=160, height=120, hp=hp, max_hp=max_hp,
+        screen_width=SCREEN_WIDTH, screen_height=SCREEN_HEIGHT,
+    )
+
+
+class TestResolveContactDamage:
+    def test_sin_colision_no_hay_dano(self):
+        p = make_player(x=0, y=0, hp=10)
+        b = make_boss_contacto(x=300, y=50)
+        resolve_contact_damage(p, b, dt=0.5, contact_timer=0.3)
+        assert p.hp == 10
+
+    def test_sin_colision_resetea_el_timer(self):
+        p = make_player(x=0, y=0, hp=10)
+        b = make_boss_contacto(x=300, y=50)
+        nuevo_timer = resolve_contact_damage(p, b, dt=0.5, contact_timer=0.3)
+        assert nuevo_timer == 0.0
+
+    def test_colision_antes_de_cumplir_0_5s_no_dana(self):
+        p = make_player(x=300, y=50, hp=10)
+        b = make_boss_contacto(x=300, y=50)
+        resolve_contact_damage(p, b, dt=0.3, contact_timer=0.0)
+        assert p.hp == 10
+
+    def test_colision_antes_de_cumplir_0_5s_acumula_timer(self):
+        p = make_player(x=300, y=50, hp=10)
+        b = make_boss_contacto(x=300, y=50)
+        nuevo_timer = resolve_contact_damage(p, b, dt=0.3, contact_timer=0.0)
+        assert round(nuevo_timer, 5) == 0.3
+
+    def test_colision_al_cumplir_0_5s_quita_2_de_dano(self):
+        p = make_player(x=300, y=50, hp=10)
+        b = make_boss_contacto(x=300, y=50)
+        resolve_contact_damage(p, b, dt=0.5, contact_timer=0.0)
+        assert p.hp == 8
+
+    def test_colision_al_cumplir_0_5s_resetea_timer(self):
+        p = make_player(x=300, y=50, hp=10)
+        b = make_boss_contacto(x=300, y=50)
+        nuevo_timer = resolve_contact_damage(p, b, dt=0.5, contact_timer=0.0)
+        assert nuevo_timer == 0.0
+
+    def test_dano_es_el_mismo_sin_importar_la_fase(self):
+        p1 = make_player(x=300, y=50, hp=10)
+        b1 = make_boss_contacto(x=300, y=50)  # fase 1
+
+        p2 = make_player(x=300, y=50, hp=10)
+        b2 = make_boss_contacto(x=300, y=50)
+        b2.take_damage(250)  # fase 3
+
+        resolve_contact_damage(p1, b1, dt=0.5, contact_timer=0.0)
+        resolve_contact_damage(p2, b2, dt=0.5, contact_timer=0.0)
+
+        assert p1.hp == p2.hp == 8
+
+    def test_contacto_continuo_sigue_danando_cada_0_5s(self):
+        p = make_player(x=300, y=50, hp=10)
+        b = make_boss_contacto(x=300, y=50)
+        timer = 0.0
+        timer = resolve_contact_damage(p, b, dt=0.5, contact_timer=timer)
+        assert p.hp == 8
+        timer = resolve_contact_damage(p, b, dt=0.5, contact_timer=timer)
+        assert p.hp == 6
