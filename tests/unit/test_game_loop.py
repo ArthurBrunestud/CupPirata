@@ -239,3 +239,63 @@ class TestGameLoopMiniBosses:
         mini = loop.mini_bosses[0]
         mini.take_damage(9999)
         assert mini.is_alive() is True
+
+class TestGameLoopParpadeoJugador:
+    def test_jugador_es_visible_por_defecto(self):
+        loop = make_game_loop()
+        assert loop.is_player_visible() is True
+
+    def test_perder_hp_activa_el_parpadeo(self):
+        loop = make_game_loop(player_hp=10)
+        loop.boss._tiempo_hasta_nueva_direccion = 999.0
+        loop.player.position = Vector2(loop.boss.position.x, loop.boss.position.y)
+        loop.player.hitbox.move_to(loop.player.position)
+
+        loop.tick(dt=0.5, move_direction=Vector2(0, 0), is_shooting=False)
+        assert loop.player.hp == 8  # confirma que si perdio hp
+        assert loop._player_flash_timer > 0.0
+
+    def test_sin_perder_hp_no_hay_parpadeo(self):
+        loop = make_game_loop(player_hp=10)
+        loop.tick(dt=0.5, move_direction=Vector2(0, 0), is_shooting=False)
+        assert loop._player_flash_timer == 0.0
+
+    def test_parpadeo_alterna_visibilidad_cada_0_1s(self):
+        loop = make_game_loop(player_hp=10)
+        loop._player_flash_timer = 1.0  # simulamos que recien empezo a parpadear
+
+        loop._actualizar_parpadeo_jugador(dt=0.05)
+        primera_visibilidad = loop.is_player_visible()
+
+        loop._actualizar_parpadeo_jugador(dt=0.1)
+        segunda_visibilidad = loop.is_player_visible()
+
+        assert primera_visibilidad != segunda_visibilidad
+
+    def test_parpadeo_termina_tras_1_segundo_y_vuelve_a_ser_visible(self):
+        loop = make_game_loop(player_hp=10)
+        loop._player_flash_timer = 1.0
+
+        loop._actualizar_parpadeo_jugador(dt=1.0)
+
+        assert loop._player_flash_timer == 0.0
+        assert loop.is_player_visible() is True
+
+    def test_parpadeo_no_se_reinicia_indefinidamente_si_no_hay_nuevo_golpe(self):
+        loop = make_game_loop(player_hp=10)
+        loop.boss._tiempo_hasta_nueva_direccion = 999.0
+        loop.player.position = Vector2(loop.boss.position.x, loop.boss.position.y)
+        loop.player.hitbox.move_to(loop.player.position)
+
+        loop.tick(dt=0.5, move_direction=Vector2(0, 0), is_shooting=False)
+        assert loop.player.hp == 8
+        timer_tras_primer_golpe = loop._player_flash_timer
+        assert timer_tras_primer_golpe > 0.0
+
+        # alejamos al jugador para que no siga recibiendo contacto
+        loop.player.position = Vector2(0, 0)
+        loop.player.hitbox.move_to(loop.player.position)
+
+        # avanzamos el tiempo suficiente para que el parpadeo termine solo
+        loop.tick(dt=1.5, move_direction=Vector2(0, 0), is_shooting=False)
+        assert loop._player_flash_timer == 0.0
