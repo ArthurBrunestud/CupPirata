@@ -168,3 +168,58 @@ class TestBossAtaqueRayo:
         b.take_damage(250)  # fase 3
         resultado = b.update(dt=3.0)  # cooldown de rayo en fase 3
         assert resultado["beam"] is not None
+
+    
+class TestBossRayoPosicionVariable:
+    def test_rayo_usa_posicion_x_provista_por_random_func(self):
+        """El Boss debe pedir la posicion X del rayo a una funcion
+        inyectable, en vez de usar siempre el centro del jefe."""
+        b = make_boss(hp=300, max_hp=300)
+        b.take_damage(150)
+
+        posiciones_solicitadas = []
+
+        def random_fijo(minimo, maximo):
+            posiciones_solicitadas.append((minimo, maximo))
+            return 123.0
+
+        resultado = b.update(dt=4.0, random_x_func=random_fijo)
+        beam = resultado["beam"]
+
+        assert beam is not None
+        assert beam.position.x == 123.0
+        assert posiciones_solicitadas == [(0, SCREEN_WIDTH - 20)]
+
+    def test_dos_rayos_seguidos_pueden_tener_distinta_posicion(self):
+        """Verifica integracion con random real (no determinista),
+        solo confirmando que el parametro funciona end-to-end."""
+        b = make_boss(hp=300, max_hp=300)
+        b.take_damage(150)
+
+        resultado1 = b.update(dt=4.0)
+        beam1_x = resultado1["beam"].position.x
+
+        b.take_damage(0)
+        resultado2 = b.update(dt=4.0)
+        beam2_x = resultado2["beam"].position.x
+
+        assert 0 <= beam1_x <= SCREEN_WIDTH - 20
+        assert 0 <= beam2_x <= SCREEN_WIDTH - 20
+
+    def test_dos_rayos_seguidos_pueden_tener_distinta_posicion(self):
+        """Verifica integracion con random real (no determinista),
+        solo confirmando que el parametro funciona end-to-end."""
+        b = make_boss(hp=300, max_hp=300)
+        b.take_damage(150)  # fase 2
+
+        resultado1 = b.update(dt=4.0)  # usa random real por defecto
+        beam1_x = resultado1["beam"].position.x
+
+        b.take_damage(0)  # no-op, solo para mantener estado
+        resultado2 = b.update(dt=4.0)
+        beam2_x = resultado2["beam"].position.x
+
+        # con random real, lo unico que podemos asegurar es que ambos
+        # estan dentro del rango valido de pantalla
+        assert 0 <= beam1_x <= SCREEN_WIDTH - 20
+        assert 0 <= beam2_x <= SCREEN_WIDTH - 20
