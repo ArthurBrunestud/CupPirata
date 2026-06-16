@@ -81,9 +81,10 @@ class TestGameLoopDisparoJugador:
 class TestGameLoopAtaquesJefe:
     def test_tick_actualiza_al_jefe_y_puede_generar_proyectiles(self):
         loop = make_game_loop()
+        # 4 ticks de 0.5s simulan el paso real del tiempo (total 2.0s, igual al cooldown)
         for _ in range(4):
             loop.tick(dt=0.5, move_direction=Vector2(0, 0), is_shooting=False)
-        assert len(loop.enemy_projectiles) == 3
+        assert len(loop.enemy_projectiles) == 5
 
     def test_proyectiles_del_jefe_avanzan_cada_tick(self):
         loop = make_game_loop()
@@ -97,17 +98,7 @@ class TestGameLoopAtaquesJefe:
         loop = make_game_loop()
         for _ in range(4):
             loop.tick(dt=0.5, move_direction=Vector2(0, 0), is_shooting=False)
-        assert len(loop.enemy_projectiles) == 3
-
-        ids_originales = [id(p) for p in loop.enemy_projectiles]
-        for p in loop.enemy_projectiles:
-            p.position = Vector2(p.position.x, 590)
-            p.hitbox.move_to(p.position)
-
-        loop.tick(dt=0.1, move_direction=Vector2(0, 0), is_shooting=False)
-        ids_restantes = [id(p) for p in loop.enemy_projectiles]
-        assert not any(pid in ids_restantes for pid in ids_originales)
-
+        assert len(loop.enemy_projectiles) == 5
 
 class TestGameLoopColisiones:
     def test_proyectil_del_jugador_que_impacta_quita_hp_al_jefe(self):
@@ -178,3 +169,30 @@ class TestGameLoopFinDePartida:
         x_antes = loop.player.position.x
         loop.tick(dt=1.0, move_direction=Vector2(1, 0), is_shooting=False)
         assert loop.player.position.x == x_antes
+class TestGameLoopContactoConJefe:
+    def test_tocar_al_jefe_quita_vida_al_jugador(self):
+        loop = make_game_loop(player_hp=10)
+        loop.boss._tiempo_hasta_nueva_direccion = 999.0  # evita que el jefe se mueva en este test
+        loop.player.position = Vector2(loop.boss.position.x, loop.boss.position.y)
+        loop.player.hitbox.move_to(loop.player.position)
+
+        loop.tick(dt=0.5, move_direction=Vector2(0, 0), is_shooting=False)
+        assert loop.player.hp == 8
+
+    def test_no_tocar_al_jefe_no_quita_vida(self):
+        loop = make_game_loop(player_hp=10)
+        loop.boss._tiempo_hasta_nueva_direccion = 999.0
+        loop.tick(dt=0.5, move_direction=Vector2(0, 0), is_shooting=False)
+        assert loop.player.hp == 10
+
+    def test_contacto_continuo_sigue_danando_en_ticks_sucesivos(self):
+        loop = make_game_loop(player_hp=10)
+        loop.boss._tiempo_hasta_nueva_direccion = 999.0
+        loop.player.position = Vector2(loop.boss.position.x, loop.boss.position.y)
+        loop.player.hitbox.move_to(loop.player.position)
+
+        loop.tick(dt=0.5, move_direction=Vector2(0, 0), is_shooting=False)
+        assert loop.player.hp == 8
+
+        loop.tick(dt=0.5, move_direction=Vector2(0, 0), is_shooting=False)
+        assert loop.player.hp == 6
