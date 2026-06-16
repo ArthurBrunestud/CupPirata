@@ -6,7 +6,7 @@ Los ataques (proyectiles y rayo) se agregan en el ciclo 6b.
 import pytest
 from src.domain.vector import Vector2
 from src.domain.entities.boss import Boss
-
+from src.domain.entities.projectile import Owner
 
 SCREEN_WIDTH = 800
 SCREEN_HEIGHT = 600
@@ -101,3 +101,70 @@ class TestBossFases:
         b.hp = 300  # manipulación directa simulando un bug externo
         b._actualizar_fase()
         assert b.phase == 3
+
+
+
+
+class TestBossAtaqueProyectiles:
+    def test_fase_1_no_dispara_antes_de_su_cooldown(self):
+        b = make_boss(hp=300, max_hp=300)  # fase 1
+        resultado = b.update(dt=1.0)  # cooldown fase 1 es 2.0s
+        assert resultado["projectiles"] == []
+
+    def test_fase_1_dispara_3_proyectiles_al_cumplir_cooldown(self):
+        b = make_boss(hp=300, max_hp=300)
+        resultado = b.update(dt=2.0)
+        assert len(resultado["projectiles"]) == 3
+
+    def test_proyectiles_disparados_pertenecen_al_enemigo(self):
+        b = make_boss(hp=300, max_hp=300)
+        resultado = b.update(dt=2.0)
+        for p in resultado["projectiles"]:
+            assert p.owner == Owner.ENEMY
+
+    def test_fase_2_dispara_5_proyectiles(self):
+        b = make_boss(hp=300, max_hp=300)
+        b.take_damage(150)  # fase 2 (50% HP)
+        resultado = b.update(dt=1.5)  # cooldown fase 2
+        assert len(resultado["projectiles"]) == 5
+
+    def test_fase_3_dispara_7_proyectiles(self):
+        b = make_boss(hp=300, max_hp=300)
+        b.take_damage(250)  # fase 3 (~17% HP)
+        resultado = b.update(dt=1.0)  # cooldown fase 3
+        assert len(resultado["projectiles"]) == 7
+
+    def test_proyectiles_salen_desde_el_centro_del_jefe(self):
+        b = make_boss(x=300, y=50, hp=300, max_hp=300)
+        resultado = b.update(dt=2.0)
+        centro_x = 300 + BOSS_WIDTH / 2
+        centro_y = 50 + BOSS_HEIGHT
+        for p in resultado["projectiles"]:
+            assert abs(p.position.x - centro_x) < BOSS_WIDTH  # margen razonable
+            assert p.position.y == centro_y
+
+
+class TestBossAtaqueRayo:
+    def test_fase_1_nunca_genera_rayo(self):
+        b = make_boss(hp=300, max_hp=300)
+        resultado = b.update(dt=10.0)  # tiempo de sobra
+        assert resultado["beam"] is None
+
+    def test_fase_2_genera_rayo_al_cumplir_su_cooldown(self):
+        b = make_boss(hp=300, max_hp=300)
+        b.take_damage(150)  # fase 2
+        resultado = b.update(dt=4.0)  # cooldown de rayo en fase 2
+        assert resultado["beam"] is not None
+
+    def test_rayo_generado_es_instancia_de_beam_attack(self):
+        b = make_boss(hp=300, max_hp=300)
+        b.take_damage(150)
+        resultado = b.update(dt=4.0)
+        from src.domain.entities.beam_attack import BeamAttack
+        assert isinstance(resultado["beam"], BeamAttack)
+
+    def test_fase_3_genera_rayo_con_su_propio_cooldown(self):
+        b = make_boss(hp=300, max_hp=300)
+        b.take_damage(250)  # fase 3
+        resultado = b.update(dt=3.0)  # cooldown de rayo en fase 3
+        assert resultado["beam"] is not None
