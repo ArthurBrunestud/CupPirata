@@ -223,3 +223,103 @@ class TestBossRayoPosicionVariable:
         # estan dentro del rango valido de pantalla
         assert 0 <= beam1_x <= SCREEN_WIDTH - 20
         assert 0 <= beam2_x <= SCREEN_WIDTH - 20
+
+class TestBossMovimientoHorizontal:
+    def test_jefe_se_mueve_segun_direccion_elegida(self):
+        b = make_boss(x=300, hp=300, max_hp=300)
+
+        def direccion_fija(opciones):
+            return 1  # siempre derecha
+
+        def intervalo_fijo(minimo, maximo):
+            return 10.0  # no vuelve a cambiar de direccion durante el test
+
+        b.update(dt=0.1, choose_direction_func=direccion_fija, choose_interval_func=intervalo_fijo)
+        assert b.position.x > 300
+
+    def test_jefe_no_se_mueve_si_direccion_elegida_es_cero(self):
+        b = make_boss(x=300, hp=300, max_hp=300)
+
+        def direccion_fija(opciones):
+            return 0
+
+        def intervalo_fijo(minimo, maximo):
+            return 10.0
+
+        b.update(dt=0.1, choose_direction_func=direccion_fija, choose_interval_func=intervalo_fijo)
+        assert b.position.x == 300
+
+    def test_jefe_no_sale_de_pantalla_por_la_derecha(self):
+        b = make_boss(x=SCREEN_WIDTH - BOSS_WIDTH - 5, hp=300, max_hp=300)
+
+        def direccion_fija(opciones):
+            return 1
+
+        def intervalo_fijo(minimo, maximo):
+            return 10.0
+
+        b.update(dt=5.0, choose_direction_func=direccion_fija, choose_interval_func=intervalo_fijo)
+        assert b.position.x == SCREEN_WIDTH - BOSS_WIDTH
+
+    def test_jefe_no_sale_de_pantalla_por_la_izquierda(self):
+        b = make_boss(x=5, hp=300, max_hp=300)
+
+        def direccion_fija(opciones):
+            return -1
+
+        def intervalo_fijo(minimo, maximo):
+            return 10.0
+
+        b.update(dt=5.0, choose_direction_func=direccion_fija, choose_interval_func=intervalo_fijo)
+        assert b.position.x == 0
+
+    def test_hitbox_se_mueve_junto_al_jefe(self):
+        b = make_boss(x=300, hp=300, max_hp=300)
+
+        def direccion_fija(opciones):
+            return 1
+
+        def intervalo_fijo(minimo, maximo):
+            return 10.0
+
+        b.update(dt=0.1, choose_direction_func=direccion_fija, choose_interval_func=intervalo_fijo)
+        assert b.hitbox.left == b.position.x
+
+    def test_fase_2_se_mueve_mas_rapido_que_fase_1(self):
+        b1 = make_boss(x=300, hp=300, max_hp=300)  # fase 1
+
+        b2 = make_boss(x=300, hp=300, max_hp=300)
+        b2.take_damage(150)  # fase 2
+
+        def direccion_fija(opciones):
+            return 1
+
+        def intervalo_fijo(minimo, maximo):
+            return 10.0
+
+        b1.update(dt=0.5, choose_direction_func=direccion_fija, choose_interval_func=intervalo_fijo)
+        b2.update(dt=0.5, choose_direction_func=direccion_fija, choose_interval_func=intervalo_fijo)
+
+        recorrido_fase1 = b1.position.x - 300
+        recorrido_fase2 = b2.position.x - 300
+        assert recorrido_fase2 > recorrido_fase1
+
+    def test_elige_nueva_direccion_solo_al_agotarse_el_intervalo(self):
+        b = make_boss(x=300, hp=300, max_hp=300)
+        llamadas = []
+
+        def direccion_contadora(opciones):
+            llamadas.append(1)
+            return 1
+
+        def intervalo_fijo(minimo, maximo):
+            return 1.0
+
+        b.update(dt=0.5, choose_direction_func=direccion_contadora, choose_interval_func=intervalo_fijo)
+        b.update(dt=0.3, choose_direction_func=direccion_contadora, choose_interval_func=intervalo_fijo)
+        # 0.5 + 0.3 = 0.8s, aun no llega a 1.0s, no debio elegir de nuevo
+        assert len(llamadas) == 1
+
+        b.update(dt=0.5, choose_direction_func=direccion_contadora, choose_interval_func=intervalo_fijo)
+        # ahora se supero 1.0s acumulado, debe haber elegido otra vez
+        assert len(llamadas) == 2
