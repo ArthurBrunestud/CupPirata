@@ -17,6 +17,7 @@ Reglas de ataque por fase:
     - Fase 2: abanico de 5 proyectiles cada 1.5s. Rayo cada 4.0s (dura 1.0s).
     - Fase 3: abanico de 7 proyectiles cada 1.0s. Rayo cada 3.0s (dura 1.2s).
 """
+import random
 from src.domain.vector import Vector2
 from src.domain.hitbox import Hitbox
 from src.domain.entities.projectile import Projectile, Owner
@@ -96,10 +97,14 @@ class Boss:
 
     # -------------------- Ataques --------------------
 
-    def update(self, dt: float) -> dict:
+    def update(self, dt: float, random_x_func=random.uniform) -> dict:
         """
         Avanza los temporizadores de ataque y genera, si corresponde,
         los ataques de este frame.
+
+        random_x_func: funcion (minimo, maximo) -> float, usada para
+        elegir la posicion X del rayo. Por defecto usa random.uniform
+        (no determinista); se puede inyectar una funcion fija en tests.
 
         Devuelve: {"projectiles": list[Projectile], "beam": BeamAttack | None}
         """
@@ -115,7 +120,7 @@ class Boss:
 
         rayo = None
         if config["beam_cooldown"] is not None and self._beam_cooldown_restante <= 0.0:
-            rayo = self._generar_rayo(config["beam_duration"])
+            rayo = self._generar_rayo(config["beam_duration"], random_x_func)
             self._beam_cooldown_restante = config["beam_cooldown"]
 
         return {"projectiles": proyectiles, "beam": rayo}
@@ -163,15 +168,13 @@ class Boss:
             )
         return proyectiles
 
-    def _generar_rayo(self, duration: float) -> BeamAttack:
-        """Genera un rayo vertical delgado en una posicion X pseudo-variable
-        (camino mas simple: usa el centro X del jefe como referencia fija
-        por ahora; la variacion dinamica de posicion se deja como parametro
-        configurable para el Spawner en una rebanada posterior)."""
-        centro = self._centro()
+    def _generar_rayo(self, duration: float, random_x_func) -> BeamAttack:
+        """Genera un rayo vertical delgado en una posicion X aleatoria,
+        dentro del rango visible de pantalla."""
         ancho_rayo = 20
+        x = random_x_func(0, self.screen_width - ancho_rayo)
         return BeamAttack(
-            position=Vector2(centro.x - ancho_rayo / 2, 0),
+            position=Vector2(x, 0),
             width=ancho_rayo,
             height=self.screen_height,
             duration=duration,
