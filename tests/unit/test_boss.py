@@ -136,11 +136,22 @@ class TestBossAtaqueProyectiles:
 
     def test_proyectiles_salen_desde_el_centro_del_jefe(self):
         b = make_boss(x=300, y=50, hp=300, max_hp=300)
-        resultado = b.update(dt=2.0)
+
+        def direccion_quieta(opciones):
+            return 0
+
+        def intervalo_largo(minimo, maximo):
+            return 10.0
+
+        resultado = b.update(
+            dt=2.0,
+            choose_direction_func=direccion_quieta,
+            choose_interval_func=intervalo_largo,
+        )
         centro_x = 300 + BOSS_WIDTH / 2
         centro_y = 50 + BOSS_HEIGHT
         for p in resultado["projectiles"]:
-            assert abs(p.position.x - centro_x) < BOSS_WIDTH  # margen razonable
+            assert abs(p.position.x - centro_x) < BOSS_WIDTH
             assert p.position.y == centro_y
 
 
@@ -315,11 +326,49 @@ class TestBossMovimientoHorizontal:
         def intervalo_fijo(minimo, maximo):
             return 1.0
 
+        # primer update: tiempo inicial es 0.0, asi que SIEMPRE elige
+        # de entrada y resetea el contador a 1.0s
         b.update(dt=0.5, choose_direction_func=direccion_contadora, choose_interval_func=intervalo_fijo)
-        b.update(dt=0.3, choose_direction_func=direccion_contadora, choose_interval_func=intervalo_fijo)
-        # 0.5 + 0.3 = 0.8s, aun no llega a 1.0s, no debio elegir de nuevo
         assert len(llamadas) == 1
 
-        b.update(dt=0.5, choose_direction_func=direccion_contadora, choose_interval_func=intervalo_fijo)
-        # ahora se supero 1.0s acumulado, debe haber elegido otra vez
+        # acumulamos 0.3s de los 1.0s necesarios: no debe elegir de nuevo
+        b.update(dt=0.3, choose_direction_func=direccion_contadora, choose_interval_func=intervalo_fijo)
+        assert len(llamadas) == 1
+
+        # acumulamos 0.3 + 0.8 = 1.1s, ya supera el intervalo de 1.0s
+        b.update(dt=0.8, choose_direction_func=direccion_contadora, choose_interval_func=intervalo_fijo)
         assert len(llamadas) == 2
+
+class TestBossTopeDeFase:
+    def test_por_defecto_puede_llegar_a_fase_3(self):
+        b = make_boss(hp=300, max_hp=300)
+        b.take_damage(250)  # llevaria a fase 3
+        assert b.phase == 3
+
+    def test_con_max_phase_2_nunca_supera_fase_2(self):
+        b = Boss(
+            position=Vector2(300, 50), width=BOSS_WIDTH, height=BOSS_HEIGHT,
+            hp=300, max_hp=300, screen_width=SCREEN_WIDTH, screen_height=SCREEN_HEIGHT,
+            max_phase=2,
+        )
+        b.take_damage(250)  # en modo normal seria fase 3
+        assert b.phase == 2
+
+    def test_con_max_phase_2_si_puede_llegar_a_fase_2(self):
+        b = Boss(
+            position=Vector2(300, 50), width=BOSS_WIDTH, height=BOSS_HEIGHT,
+            hp=300, max_hp=300, screen_width=SCREEN_WIDTH, screen_height=SCREEN_HEIGHT,
+            max_phase=2,
+        )
+        b.take_damage(150)  # deberia llegar a fase 2 normalmente
+        assert b.phase == 2
+
+    def test_con_max_phase_2_jefe_puede_morir_igual_estando_en_fase_2(self):
+        b = Boss(
+            position=Vector2(300, 50), width=BOSS_WIDTH, height=BOSS_HEIGHT,
+            hp=300, max_hp=300, screen_width=SCREEN_WIDTH, screen_height=SCREEN_HEIGHT,
+            max_phase=2,
+        )
+        b.take_damage(300)  # hp llega a 0
+        assert b.is_alive() is False
+        assert b.phase == 2  # se queda en fase 2, pero si esta muerto
