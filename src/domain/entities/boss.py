@@ -28,7 +28,7 @@ from src.domain.hitbox import Hitbox
 from src.domain.entities.projectile import Projectile, Owner
 from src.domain.entities.beam_attack import BeamAttack
 
-PROJECTILE_SPEED = 250
+PROJECTILE_SPEED = 480
 PROJECTILE_WIDTH = 10
 PROJECTILE_HEIGHT = 10
 PROJECTILE_DAMAGE = 1
