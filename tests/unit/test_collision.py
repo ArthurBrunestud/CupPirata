@@ -3,6 +3,8 @@ Tests unitarios para las reglas de colision (domain/rules).
 TDD - Ciclo 7: resolucion de impactos entre proyectiles y entidades.
 """
 import pytest
+from src.domain.entities.beam_attack import BeamAttack
+from src.domain.rules.collision import resolve_beam_damage
 from src.domain.vector import Vector2
 from src.domain.entities.player import Player
 from src.domain.entities.boss import Boss
@@ -179,4 +181,74 @@ class TestResolveContactDamage:
         timer = resolve_contact_damage(p, b, dt=0.5, contact_timer=timer)
         assert p.hp == 8
         timer = resolve_contact_damage(p, b, dt=0.5, contact_timer=timer)
+        assert p.hp == 6
+
+
+
+def make_beam_para_test(x=380, y=0, width=20, height=600, duration=2.0, warning_duration=1.0):
+    return BeamAttack(
+        position=Vector2(x, y), width=width, height=height,
+        duration=duration, warning_duration=warning_duration,
+    )
+
+
+class TestResolveBeamDamage:
+    def test_sin_colision_no_hay_dano(self):
+        p = make_player(x=0, y=0, hp=10)
+        beam = make_beam_para_test(x=380, y=0)
+        resolve_beam_damage(p, [beam], dt=0.5, beam_timer=0.3)
+        assert p.hp == 10
+
+    def test_sin_colision_resetea_el_timer(self):
+        p = make_player(x=0, y=0, hp=10)
+        beam = make_beam_para_test(x=380, y=0)
+        nuevo_timer = resolve_beam_damage(p, [beam], dt=0.5, beam_timer=0.3)
+        assert nuevo_timer == 0.0
+
+    def test_colision_con_rayo_en_alerta_no_dana(self):
+        p = make_player(x=380, y=0, hp=10)
+        beam = make_beam_para_test(x=380, y=0, duration=2.0, warning_duration=1.0)
+        # el rayo recien creado esta en alerta (is_warning=True, is_active=False)
+        resolve_beam_damage(p, [beam], dt=0.5, beam_timer=0.0)
+        assert p.hp == 10
+
+    def test_colision_con_rayo_activo_antes_de_cumplir_0_5s_no_dana(self):
+        p = make_player(x=380, y=0, hp=10)
+        beam = make_beam_para_test(x=380, y=0, duration=2.0, warning_duration=1.0)
+        beam.update(dt=1.0)  # ya paso la alerta, ahora esta activo
+        resolve_beam_damage(p, [beam], dt=0.3, beam_timer=0.0)
+        assert p.hp == 10
+
+    def test_colision_con_rayo_activo_al_cumplir_0_5s_quita_2_de_dano(self):
+        p = make_player(x=380, y=0, hp=10)
+        beam = make_beam_para_test(x=380, y=0, duration=2.0, warning_duration=1.0)
+        beam.update(dt=1.0)
+        resolve_beam_damage(p, [beam], dt=0.5, beam_timer=0.0)
+        assert p.hp == 8
+
+    def test_colision_con_rayo_activo_resetea_timer_tras_danar(self):
+        p = make_player(x=380, y=0, hp=10)
+        beam = make_beam_para_test(x=380, y=0, duration=2.0, warning_duration=1.0)
+        beam.update(dt=1.0)
+        nuevo_timer = resolve_beam_damage(p, [beam], dt=0.5, beam_timer=0.0)
+        assert nuevo_timer == 0.0
+
+    def test_jugador_lejos_de_todos_los_rayos_no_recibe_dano(self):
+        p = make_player(x=0, y=500, hp=10)
+        beam1 = make_beam_para_test(x=380, y=0)
+        beam1.update(dt=1.0)
+        beam2 = make_beam_para_test(x=600, y=0)
+        beam2.update(dt=1.0)
+        resolve_beam_damage(p, [beam1, beam2], dt=0.5, beam_timer=0.0)
+        assert p.hp == 10
+
+    def test_contacto_continuo_con_rayo_activo_sigue_danando(self):
+        p = make_player(x=380, y=0, hp=10)
+        beam = make_beam_para_test(x=380, y=0, duration=3.0, warning_duration=1.0)
+        beam.update(dt=1.0)
+        timer = 0.0
+        timer = resolve_beam_damage(p, [beam], dt=0.5, beam_timer=timer)
+        assert p.hp == 8
+        beam.update(dt=0.5)
+        timer = resolve_beam_damage(p, [beam], dt=0.5, beam_timer=timer)
         assert p.hp == 6

@@ -79,3 +79,39 @@ def resolve_contact_damage(player, boss, dt: float, contact_timer: float) -> flo
         return 0.0
 
     return nuevo_timer
+
+BEAM_DAMAGE_INTERVAL = 0.5
+BEAM_DAMAGE_AMOUNT = 2
+
+
+def resolve_beam_damage(player, beams: list, dt: float, beam_timer: float) -> float:
+    """
+    Aplica dano por contacto con un rayo (BeamAttack) en su fase activa.
+
+    Solo dana si el rayo esta is_active() (ya paso su fase de alerta).
+    Si el jugador esta en contacto con cualquier rayo activo, acumula dt
+    en beam_timer; al llegar a BEAM_DAMAGE_INTERVAL (0.5s), aplica
+    BEAM_DAMAGE_AMOUNT (2) de dano y reinicia el timer a 0.
+
+    Si no hay contacto con ningun rayo activo, el timer se reinicia a 0
+    (mismo patron que resolve_contact_damage: el contacto debe ser
+    continuo para acumular dano).
+
+    Devuelve el nuevo valor de beam_timer, que quien llama debe
+    conservar y pasar de vuelta en el siguiente frame.
+    """
+    hay_contacto = any(
+        beam.is_active() and player.hitbox.collides_with(beam.hitbox)
+        for beam in beams
+    )
+
+    if not hay_contacto:
+        return 0.0
+
+    nuevo_timer = beam_timer + dt
+
+    if nuevo_timer >= BEAM_DAMAGE_INTERVAL:
+        player.take_damage(BEAM_DAMAGE_AMOUNT)
+        return 0.0
+
+    return nuevo_timer
