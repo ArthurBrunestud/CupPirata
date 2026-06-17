@@ -1,6 +1,6 @@
 """
 Punto de entrada del juego. Conecta dominio, aplicacion e infraestructura.
-Corre en pantalla completa, adaptandose a la resolucion del monitor.
+Corre en pantalla completa, adaptandose a la resolucion real del monitor.
 
 Controles:
     - En el menu de dificultad: 1 = Casual, 2 = Profesional
@@ -19,6 +19,7 @@ from src.domain.game_state import GameState
 from src.application.game_loop import GameLoop
 from src.infrastructure.pygame_input import read_input
 from src.infrastructure.renderer import Renderer
+from src.infrastructure.audio import AudioManager
 
 FPS = 60
 
@@ -94,14 +95,12 @@ def main():
 
     screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
     screen_width, screen_height = screen.get_size()
-
-    screen = pygame.display.set_mode((screen_width, screen_height), pygame.FULLSCREEN)
     pygame.display.set_caption("Cuphead Shmup - Prototipo TDD")
     clock = pygame.time.Clock()
     font = pygame.font.SysFont("Arial", 28)
-    print(f"[DEBUG] Info dice: {screen_width}x{screen_height}")
-    print(f"[DEBUG] Surface real: {screen.get_width()}x{screen.get_height()}")
+
     renderer = Renderer(screen_width, screen_height)
+    audio = AudioManager()
 
     estado = ESTADO_MENU
     game_loop = None
@@ -124,19 +123,26 @@ def main():
                         game_loop = crear_partida(screen_width, screen_height, max_phase=2)
                         estado = ESTADO_JUGANDO
                         pausado = False
+                        audio.reproducir_cancion_aleatoria()
                     elif evento.key == pygame.K_2:
                         game_loop = crear_partida(screen_width, screen_height, max_phase=3)
                         estado = ESTADO_JUGANDO
                         pausado = False
+                        audio.reproducir_cancion_aleatoria()
 
                 elif estado == ESTADO_JUGANDO:
                     if evento.key == pygame.K_p and not game_loop.game_state.is_game_over():
                         pausado = not pausado
+                        if pausado:
+                            audio.pausar()
+                        else:
+                            audio.reanudar()
 
                     if evento.key == pygame.K_r and game_loop.game_state.is_game_over():
                         estado = ESTADO_MENU
                         game_loop = None
                         pausado = False
+                        audio.detener()
 
         if estado == ESTADO_MENU:
             dibujar_menu_dificultad(screen, font, screen_width, screen_height)
