@@ -92,15 +92,15 @@ def dibujar_mensaje_reinicio(surface, font, screen_width, screen_height):
 def main():
     pygame.init()
 
-    info_pantalla = pygame.display.Info()
-    screen_width = info_pantalla.current_w
-    screen_height = info_pantalla.current_h
+    screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+    screen_width, screen_height = screen.get_size()
 
     screen = pygame.display.set_mode((screen_width, screen_height), pygame.FULLSCREEN)
     pygame.display.set_caption("Cuphead Shmup - Prototipo TDD")
     clock = pygame.time.Clock()
     font = pygame.font.SysFont("Arial", 28)
-
+    print(f"[DEBUG] Info dice: {screen_width}x{screen_height}")
+    print(f"[DEBUG] Surface real: {screen.get_width()}x{screen.get_height()}")
     renderer = Renderer(screen_width, screen_height)
 
     estado = ESTADO_MENU
