@@ -198,42 +198,62 @@ class TestGameLoopContactoConJefe:
         assert loop.player.hp == 6
 
 class TestGameLoopMiniBosses:
-    def test_no_aparecen_mini_bosses_con_hp_alto(self):
+    def test_no_aparecen_mini_bosses_en_fase_1_o_2(self):
         loop = make_game_loop(boss_hp=300)
         loop.tick(dt=0.1, move_direction=Vector2(0, 0), is_shooting=False)
         assert loop.mini_bosses == []
 
-    def test_aparecen_dos_mini_bosses_al_cruzar_50_hp(self):
-        loop = make_game_loop(boss_hp=51)
-        loop.boss.take_damage(2)  # queda en 49, <= 50
+    def test_aparecen_dos_mini_bosses_al_llegar_a_fase_3(self):
+        loop = make_game_loop(boss_hp=300)
+        loop.boss.take_damage(250)  # deja al jefe en fase 3
         loop.tick(dt=0.1, move_direction=Vector2(0, 0), is_shooting=False)
         assert len(loop.mini_bosses) == 2
 
     def test_mini_bosses_aparecen_en_lados_opuestos(self):
-        loop = make_game_loop(boss_hp=51)
-        loop.boss.take_damage(2)
+        loop = make_game_loop(boss_hp=300)
+        loop.boss.take_damage(250)
         loop.tick(dt=0.1, move_direction=Vector2(0, 0), is_shooting=False)
         posiciones_x = sorted(m.position.x for m in loop.mini_bosses)
         assert posiciones_x[0] < SCREEN_WIDTH / 2
         assert posiciones_x[1] > SCREEN_WIDTH / 2
 
     def test_mini_bosses_no_vuelven_a_crearse_en_ticks_siguientes(self):
-        loop = make_game_loop(boss_hp=51)
-        loop.boss.take_damage(2)
+        loop = make_game_loop(boss_hp=300)
+        loop.boss.take_damage(250)
         loop.tick(dt=0.1, move_direction=Vector2(0, 0), is_shooting=False)
         loop.tick(dt=0.1, move_direction=Vector2(0, 0), is_shooting=False)
         assert len(loop.mini_bosses) == 2
 
+    def test_no_aparecen_mini_bosses_si_max_phase_limita_a_fase_2(self):
+        """Caso clave: en modo Casual (max_phase=2), el jefe nunca llega
+        a fase 3, asi que los mini-jefes nunca deben aparecer, sin
+        importar cuanto HP pierda."""
+        player = Player(
+            position=Vector2(400, 500), width=40, height=30, hp=3, speed=200,
+            screen_width=SCREEN_WIDTH, screen_height=SCREEN_HEIGHT,
+        )
+        boss = Boss(
+            position=Vector2(300, 50), width=160, height=120, hp=300, max_hp=300,
+            screen_width=SCREEN_WIDTH, screen_height=SCREEN_HEIGHT, max_phase=2,
+        )
+        game_state = GameState()
+        loop = GameLoop(player=player, boss=boss, game_state=game_state)
+
+        loop.boss.take_damage(280)  # en modo normal seria fase 3 (HP=20, ~7%)
+        loop.tick(dt=0.1, move_direction=Vector2(0, 0), is_shooting=False)
+
+        assert loop.boss.phase == 2  # confirma el tope de fase
+        assert loop.mini_bosses == []  # y por lo tanto, sin mini-jefes
+
     def test_mini_bosses_generan_proyectiles_propios(self):
-        loop = make_game_loop(boss_hp=51)
-        loop.boss.take_damage(2)
+        loop = make_game_loop(boss_hp=300)
+        loop.boss.take_damage(250)
         loop.tick(dt=2.0, move_direction=Vector2(0, 0), is_shooting=False)
-        # cada mini boss dispara 3 balas -> 6 en total, mas las del boss principal
         assert len(loop.enemy_projectiles) >= 6
 
     def test_mini_bosses_son_invulnerables_a_proyectiles_del_jugador(self):
-        loop = make_game_loop(boss_hp=51)
-        loop.boss.take_damage(2)
+        loop = make_game_loop(boss_hp=300)
+        loop.boss.take_damage(250)
         loop.tick(dt=0.1, move_direction=Vector2(0, 0), is_shooting=False)
 
         mini = loop.mini_bosses[0]
