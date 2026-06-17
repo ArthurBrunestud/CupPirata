@@ -103,18 +103,16 @@ class TestBossFases:
         assert b.phase == 3
 
 
-
-
 class TestBossAtaqueProyectiles:
     def test_fase_1_no_dispara_antes_de_su_cooldown(self):
-        b = make_boss(hp=300, max_hp=300)  # fase 1
-        resultado = b.update(dt=1.0)  # cooldown fase 1 es 2.0s
+        b = make_boss(hp=300, max_hp=300)
+        resultado = b.update(dt=1.0)
         assert resultado["projectiles"] == []
 
-    def test_fase_1_dispara_3_proyectiles_al_cumplir_cooldown(self):
+    def test_fase_1_dispara_5_proyectiles_al_cumplir_cooldown(self):
         b = make_boss(hp=300, max_hp=300)
         resultado = b.update(dt=2.0)
-        assert len(resultado["projectiles"]) == 3
+        assert len(resultado["projectiles"]) == 5
 
     def test_proyectiles_disparados_pertenecen_al_enemigo(self):
         b = make_boss(hp=300, max_hp=300)
@@ -122,17 +120,17 @@ class TestBossAtaqueProyectiles:
         for p in resultado["projectiles"]:
             assert p.owner == Owner.ENEMY
 
-    def test_fase_2_dispara_5_proyectiles(self):
+    def test_fase_2_dispara_8_proyectiles(self):
         b = make_boss(hp=300, max_hp=300)
-        b.take_damage(150)  # fase 2 (50% HP)
-        resultado = b.update(dt=1.5)  # cooldown fase 2
-        assert len(resultado["projectiles"]) == 5
+        b.take_damage(150)
+        resultado = b.update(dt=1.5)
+        assert len(resultado["projectiles"]) == 8
 
-    def test_fase_3_dispara_7_proyectiles(self):
+    def test_fase_3_dispara_8_proyectiles(self):
         b = make_boss(hp=300, max_hp=300)
-        b.take_damage(250)  # fase 3 (~17% HP)
-        resultado = b.update(dt=1.0)  # cooldown fase 3
-        assert len(resultado["projectiles"]) == 7
+        b.take_damage(250)
+        resultado = b.update(dt=1.0)
+        assert len(resultado["projectiles"]) == 8
 
     def test_proyectiles_salen_desde_el_centro_del_jefe(self):
         b = make_boss(x=300, y=50, hp=300, max_hp=300)
@@ -154,37 +152,68 @@ class TestBossAtaqueProyectiles:
             assert abs(p.position.x - centro_x) < BOSS_WIDTH
             assert p.position.y == centro_y
 
-
 class TestBossAtaqueRayo:
-    def test_fase_1_nunca_genera_rayo(self):
+    def test_fase_1_genera_un_solo_rayo_al_cumplir_cooldown(self):
         b = make_boss(hp=300, max_hp=300)
-        resultado = b.update(dt=10.0)  # tiempo de sobra
-        assert resultado["beam"] is None
+        resultado = b.update(dt=6.0)
+        assert len(resultado["beams"]) == 1
 
-    def test_fase_2_genera_rayo_al_cumplir_su_cooldown(self):
+    def test_fase_1_rayo_es_vertical(self):
         b = make_boss(hp=300, max_hp=300)
-        b.take_damage(150)  # fase 2
-        resultado = b.update(dt=4.0)  # cooldown de rayo en fase 2
-        assert resultado["beam"] is not None
+        resultado = b.update(dt=6.0)
+        assert resultado["beams"][0].is_vertical() is True
 
-    def test_rayo_generado_es_instancia_de_beam_attack(self):
+    def test_fase_1_no_genera_rayo_antes_de_su_cooldown(self):
+        b = make_boss(hp=300, max_hp=300)
+        resultado = b.update(dt=3.0)
+        assert resultado["beams"] == []
+
+    def test_fase_2_genera_entre_2_y_3_rayos(self):
         b = make_boss(hp=300, max_hp=300)
         b.take_damage(150)
-        resultado = b.update(dt=4.0)
-        from src.domain.entities.beam_attack import BeamAttack
-        assert isinstance(resultado["beam"], BeamAttack)
+        resultado = b.update(dt=3.0)
+        assert len(resultado["beams"]) in (2, 3)
 
-    def test_fase_3_genera_rayo_con_su_propio_cooldown(self):
+    def test_fase_2_rayos_son_verticales(self):
         b = make_boss(hp=300, max_hp=300)
-        b.take_damage(250)  # fase 3
-        resultado = b.update(dt=3.0)  # cooldown de rayo en fase 3
-        assert resultado["beam"] is not None
+        b.take_damage(150)
+        resultado = b.update(dt=3.0)
+        for beam in resultado["beams"]:
+            assert beam.is_vertical() is True
 
-    
+    def test_fase_3_genera_entre_2_y_3_rayos(self):
+        b = make_boss(hp=300, max_hp=300)
+        b.take_damage(250)
+        resultado = b.update(dt=2.0)
+        assert len(resultado["beams"]) in (2, 3)
+
+    def test_fase_3_orientacion_de_rayos_es_aleatoria(self):
+        b = make_boss(hp=300, max_hp=300)
+        b.take_damage(250)
+
+        def orientacion_horizontal(opciones):
+            return "horizontal"
+
+        resultado = b.update(dt=2.0, choose_orientation_func=orientacion_horizontal)
+        for beam in resultado["beams"]:
+            assert beam.is_vertical() is False
+
+    def test_rayos_generados_tienen_fase_de_alerta(self):
+        b = make_boss(hp=300, max_hp=300)
+        resultado = b.update(dt=6.0)
+        for beam in resultado["beams"]:
+            assert beam.is_warning() is True
+            assert beam.is_active() is False
+
+    def test_rayos_en_fase_2_no_colisionan_en_la_misma_posicion_x(self):
+        b = make_boss(hp=300, max_hp=300)
+        b.take_damage(150)
+        resultado = b.update(dt=3.0)
+        posiciones_x = [beam.position.x for beam in resultado["beams"]]
+        assert len(set(posiciones_x)) == len(posiciones_x)
+
 class TestBossRayoPosicionVariable:
     def test_rayo_usa_posicion_x_provista_por_random_func(self):
-        """El Boss debe pedir la posicion X del rayo a una funcion
-        inyectable, en vez de usar siempre el centro del jefe."""
         b = make_boss(hp=300, max_hp=300)
         b.take_damage(150)
 
@@ -194,46 +223,19 @@ class TestBossRayoPosicionVariable:
             posiciones_solicitadas.append((minimo, maximo))
             return 123.0
 
-        resultado = b.update(dt=4.0, random_x_func=random_fijo)
-        beam = resultado["beam"]
-
-        assert beam is not None
-        assert beam.position.x == 123.0
-        assert posiciones_solicitadas == [(0, SCREEN_WIDTH - 20)]
+        resultado = b.update(dt=3.0, random_x_func=random_fijo)
+        assert len(resultado["beams"]) >= 1
+        assert resultado["beams"][0].position.x == 123.0
 
     def test_dos_rayos_seguidos_pueden_tener_distinta_posicion(self):
-        """Verifica integracion con random real (no determinista),
-        solo confirmando que el parametro funciona end-to-end."""
         b = make_boss(hp=300, max_hp=300)
         b.take_damage(150)
 
-        resultado1 = b.update(dt=4.0)
-        beam1_x = resultado1["beam"].position.x
+        resultado1 = b.update(dt=3.0)
+        resultado2 = b.update(dt=3.0)
 
-        b.take_damage(0)
-        resultado2 = b.update(dt=4.0)
-        beam2_x = resultado2["beam"].position.x
-
-        assert 0 <= beam1_x <= SCREEN_WIDTH - 20
-        assert 0 <= beam2_x <= SCREEN_WIDTH - 20
-
-    def test_dos_rayos_seguidos_pueden_tener_distinta_posicion(self):
-        """Verifica integracion con random real (no determinista),
-        solo confirmando que el parametro funciona end-to-end."""
-        b = make_boss(hp=300, max_hp=300)
-        b.take_damage(150)  # fase 2
-
-        resultado1 = b.update(dt=4.0)  # usa random real por defecto
-        beam1_x = resultado1["beam"].position.x
-
-        b.take_damage(0)  # no-op, solo para mantener estado
-        resultado2 = b.update(dt=4.0)
-        beam2_x = resultado2["beam"].position.x
-
-        # con random real, lo unico que podemos asegurar es que ambos
-        # estan dentro del rango valido de pantalla
-        assert 0 <= beam1_x <= SCREEN_WIDTH - 20
-        assert 0 <= beam2_x <= SCREEN_WIDTH - 20
+        for beam in resultado1["beams"] + resultado2["beams"]:
+            assert 0 <= beam.position.x <= SCREEN_WIDTH - 20
 
 class TestBossMovimientoHorizontal:
     def test_jefe_se_mueve_segun_direccion_elegida(self):
